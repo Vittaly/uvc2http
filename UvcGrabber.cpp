@@ -124,9 +124,8 @@ bool UvcGrabber::Suspend()
     }
     return true;
 
-  
-
 }
+
 bool UvcGrabber::Resume()
 {
   if (_cameraFd == -1 || _isBroken) return false;
@@ -135,10 +134,11 @@ bool UvcGrabber::Resume()
   int ioctlResult = Ioctl(_cameraFd, VIDIOC_STREAMON, IoctlMaxTries, &type);
   if (ioctlResult != 0) {
     Tracer::Log("UvcGrabber::Resume: Failed Ioctl(VIDIOC_STREAMON).\n");
-    FreeBuffers(_cameraFd, videoBuffers);
+    FreeBuffers(_cameraFd, _videoBuffers);
     ::close(_cameraFd);
     return false;
   }
+  return true;
 
 }
     
