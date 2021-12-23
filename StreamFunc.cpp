@@ -72,6 +72,11 @@ namespace UvcStreamer {
         
           releasedBuffer = httpServer.DequeueBuffer();
         }
+        if (config.GrabberCfg.UseSuspend){
+        if (httpServer.GetClientsNumber()==0 ) uvcGrabber.Suspend();
+        else uvcGrabber.Resume();
+        }
+        
       }
       else {
         std::vector<const VideoBuffer*> buffers = httpServer.DequeueAllBuffers();
