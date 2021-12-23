@@ -111,6 +111,36 @@ bool UvcGrabber::ReInit()
   
   return Init();
 }
+
+bool UvcGrabber::Suspend()
+{
+   if (_cameraFd == -1) return false;
+
+    int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    int ioctlResult = Ioctl(_cameraFd, VIDIOC_STREAMOFF, IoctlMaxTries, &type);
+    if (ioctlResult != 0) {
+      Tracer::Log("UvcGrabber::Suspend: Failed Ioctl(VIDIOC_STREAMOFF).\n");
+      return false;
+    }
+    return true;
+
+  
+
+}
+bool UvcGrabber::Resume()
+{
+  if (_cameraFd == -1 || _isBroken) return false;
+
+  int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  int ioctlResult = Ioctl(_cameraFd, VIDIOC_STREAMON, IoctlMaxTries, &type);
+  if (ioctlResult != 0) {
+    Tracer::Log("UvcGrabber::Resume: Failed Ioctl(VIDIOC_STREAMON).\n");
+    FreeBuffers(_cameraFd, videoBuffers);
+    ::close(_cameraFd);
+    return false;
+  }
+
+}
     
 void UvcGrabber::Shutdown()
 {

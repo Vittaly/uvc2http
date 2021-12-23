@@ -60,6 +60,10 @@ public:
   
   // @brief Shutdowns video capture and free all used resources.
   void Shutdown();
+  // @brief Suspend camera capture.
+  bool UvcGrabber::Suspend();
+  // @brief Resume camera capture.
+  bool UvcGrabber::Resume();
 
   // @brief Return true if fatal error happened during dequeuing/requeing of frames
   //        Expected recovery steps: requeu all dequed frames, call Shutdown() and then Init().
