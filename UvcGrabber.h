@@ -44,6 +44,7 @@ public:
     uint32_t FrameHeight;
     uint32_t FrameRate; 
     uint32_t BuffersNumber;
+    bool UseSuspend;
 
     // Function which is called for app specific camera configuration.
     SetupCameraFunc SetupCamera;
@@ -69,6 +70,9 @@ public:
   //        Expected recovery steps: requeu all dequed frames, call Shutdown() and then Init().
   bool IsBroken() const { return _isBroken; }
 
+  // @brief Return true if camera is suspended
+  bool IsSuspended() const { return _isSuspended; }
+
   // @brief Return true if camera was successfully initialized.
   bool IsCameraReady() const { return _cameraFd != -1; }
 
@@ -86,6 +90,7 @@ private:
   std::vector<VideoBuffer> _videoBuffers;
   int _cameraFd;
   bool _isBroken;
+  bool _isSuspended;
 };
 
 #endif // UVCGRABBER_H

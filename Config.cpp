@@ -50,8 +50,10 @@ UvcStreamerCfg GetConfig(int argc, char **argv) {
   config.GrabberCfg.FrameRate = 15U;
   config.GrabberCfg.BuffersNumber = 4U;
   config.GrabberCfg.SetupCamera = nullptr;
+  config.GrabberCfg.UseSuspend = false;
   
   config.ServerCfg.ServicePort = "8081";
+  config.ServerCfg.UseSuspend = false;
   
   static option options[] = {
     {"d", required_argument, 0, 0}, // Camera device name
@@ -66,6 +68,8 @@ UvcStreamerCfg GetConfig(int argc, char **argv) {
     {"fps", required_argument, 0, 0}, // Frame rate
     {"p", required_argument, 0, 0}, // TCP port
     {"port", required_argument, 0, 0}, // TCP port
+    {"s", no_argument, 0, 0}, // suspend camera on idle
+    {"suspendCamera", no_argument, 0, 0}, // suspend camera on idle
     {0, 0, 0, 0}
   };
   
@@ -170,6 +174,18 @@ UvcStreamerCfg GetConfig(int argc, char **argv) {
             
             break;
 
+          case 12:
+          case 13:
+            {
+              
+                config.GrabberCfg.UseSuspend = true;
+                config.ServerCfg.UseSuspend = true;
+                Tracer::Log("config.GrabberCfg.UseSuspend = true.\n");
+             
+            }
+            
+            break;
+
           default:
             foundError = true;
       }
@@ -186,6 +202,6 @@ UvcStreamerCfg GetConfig(int argc, char **argv) {
 }
 
 void PrintUsage() {
-  printf("Usage: uvc2http -d /dev/video0 -b 4 -w 640 -h 480 -f 30 -p 8080\n");
+  printf("Usage: uvc2http -d /dev/video0 -b 4 -w 640 -h 480 -f 30 -p 8080 [-s]\n");
 }
 
