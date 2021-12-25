@@ -53,7 +53,6 @@ UvcStreamerCfg GetConfig(int argc, char **argv) {
   config.GrabberCfg.UseSuspend = false;
   
   config.ServerCfg.ServicePort = "8081";
-  config.ServerCfg.UseSuspend = false;
   
   static option options[] = {
     {"d", required_argument, 0, 0}, // Camera device name
@@ -179,7 +178,6 @@ UvcStreamerCfg GetConfig(int argc, char **argv) {
             {
               
                 config.GrabberCfg.UseSuspend = true;
-                config.ServerCfg.UseSuspend = true;
                 Tracer::Log("config.GrabberCfg.UseSuspend = true.\n");
              
             }

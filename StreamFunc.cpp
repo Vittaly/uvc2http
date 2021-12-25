@@ -29,69 +29,91 @@
 #include "HttpServer.h"
 #include "MjpegUtils.h"
 
-namespace UvcStreamer {
-  
-  int StreamFunc(const UvcStreamerCfg& config, ShouldExit shouldExit) {
-    
+namespace UvcStreamer
+{
+
+  int StreamFunc(const UvcStreamerCfg& config, ShouldExit shouldExit)
+  {
+
     HttpServer httpServer;
-    if (!httpServer.Init(config.ServerCfg.ServicePort.c_str())) {
+    if (!httpServer.Init(config.ServerCfg.ServicePort.c_str()))
+    {
       Tracer::Log("Failed to initialize HTTP server.\n");
       return -2;
     }
-    
+
     // Init and configure UVC video camera
     UvcGrabber uvcGrabber(config.GrabberCfg);
-    if (!uvcGrabber.Init()) {
+    if (!uvcGrabber.Init())
+    {
       Tracer::Log("Failed to initialize UvcGrabber (is there a UVC camera?). The app will try to initialize later.\n");
     }
-    
+
     static const long Kilo = 1000;
-    
-    while (!shouldExit()) {
-      
-      if (uvcGrabber.IsCameraReady() && !uvcGrabber.IsBroken()) {
-        const VideoBuffer* videoBuffer = uvcGrabber.DequeuFrame();
-        if (videoBuffer != nullptr) {
-            if (!httpServer.QueueBuffer(videoBuffer)) {
+
+    while (!shouldExit())
+    {
+
+      if (uvcGrabber.IsCameraReady() && !uvcGrabber.IsBroken())
+      {
+        if (!uvcGrabber.IsSuspended())
+        {
+          const VideoBuffer* videoBuffer = uvcGrabber.DequeuFrame();
+          if (videoBuffer != nullptr)
+          {
+            if (!httpServer.QueueBuffer(videoBuffer))
+            {
               uvcGrabber.RequeueFrame(videoBuffer);
             }
+          }
         }
-      
         static const long MaxServeTimeMicroSec = (Kilo * Kilo) / config.GrabberCfg.FrameRate / 2;
         httpServer.ServeRequests(MaxServeTimeMicroSec);
-        
-        // It is safe to sleep for 1 ms. There is no significant 
-        // difference (in terms of CPU utilization) in comparison with 
+
+        // It is safe to sleep for 1 ms. There is no significant
+        // difference (in terms of CPU utilization) in comparison with
         // sleeping for a rest of time.
-        const timespec SleepTime {0, Kilo * Kilo};
+        const timespec SleepTime{0, Kilo * Kilo};
         ::nanosleep(&SleepTime, nullptr);
 
-        const VideoBuffer* releasedBuffer = httpServer.DequeueBuffer();
-        while (releasedBuffer != nullptr) {
+        const VideoBuffer *releasedBuffer = httpServer.DequeueBuffer();
+        while (releasedBuffer != nullptr)
+        {
           uvcGrabber.RequeueFrame(releasedBuffer);
-        
+
           releasedBuffer = httpServer.DequeueBuffer();
         }
-        if (config.GrabberCfg.UseSuspend){
-        if (httpServer.GetClientsNumber()==0 ) uvcGrabber.Suspend();
-        else uvcGrabber.Resume();
+        if (config.GrabberCfg.UseSuspend)
+        {
+          if (httpServer.GetClientsNumber() == 0)
+          {
+            std::vector<const VideoBuffer*> buffers = httpServer.DequeueAllBuffers();
+            for (auto buffer : buffers)
+            {
+              uvcGrabber.RequeueFrame(buffer);
+            }
+            uvcGrabber.Suspend();
+          }
+          else
+            uvcGrabber.Resume();
         }
-        
       }
-      else {
-        std::vector<const VideoBuffer*> buffers = httpServer.DequeueAllBuffers();
-        for (auto buffer : buffers) {
+      else
+      {
+        std::vector<const VideoBuffer *> buffers = httpServer.DequeueAllBuffers();
+        for (auto buffer : buffers)
+        {
           uvcGrabber.RequeueFrame(buffer);
         }
-        
+
         // Repeat recovery attempts every second.
-        const timespec RecoveryDelay {1, 0};
+        const timespec RecoveryDelay{1, 0};
         ::nanosleep(&RecoveryDelay, nullptr);
-        
+
         uvcGrabber.ReInit();
       }
     }
-    
+
     return 0;
   }
 }

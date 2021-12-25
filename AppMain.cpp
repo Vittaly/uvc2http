@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     return -1;
   }
   
-  config.GrabberCfg.SetupCamera = SetupCamera;
+  //config.GrabberCfg.SetupCamera = SetupCamera;
   
   // Ignore SIGPIPE (OS sends it in case of transmitting to a closed TCP socket)
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {

@@ -45,19 +45,20 @@ namespace
   int Ioctl(int fd, int request, unsigned triesNumber, void *arg);
 
   // @brief Configures camera according to a given configuration except V4L buffers.
-  bool SetupCamera(int cameraFd, const UvcGrabber::Config& config);
+  bool SetupCamera(int cameraFd, const UvcGrabber::Config &config);
 
   // @brief Allocates and maps V4L buffers for a given camera file descriptor.
   std::vector<VideoBuffer> SetupBuffers(int cameraFd, uint32_t buffersNumber);
 
   // @brief Free V4L buffers allocated by SetupBuffers and remove them from videoBuffers.
-  void FreeBuffers(int cameraFd, std::vector<VideoBuffer>& videoBuffers);
+  void FreeBuffers(int cameraFd, std::vector<VideoBuffer> &videoBuffers);
 }
 
-UvcGrabber::UvcGrabber(const UvcGrabber::Config& config)
+UvcGrabber::UvcGrabber(const UvcGrabber::Config &config)
     : _config(config),
       _cameraFd(-1),
-      _isBroken(false)
+      _isBroken(false),
+      _isSuspended(config.UseSuspend)
 {
 }
 
@@ -85,16 +86,15 @@ bool UvcGrabber::Init()
     ::close(cameraFd);
     return false;
   }
-
-  std::vector<VideoBuffer> videoBuffers = SetupBuffers(cameraFd, _config.BuffersNumber);
-  if (videoBuffers.empty())
+  if (!_isSuspended)
   {
-    Tracer::Log("Failed SetupBuffers().\n");
-    ::close(cameraFd);
-    return false;
-  }
-  if (!_config.UseSuspend)
-  {
+    std::vector<VideoBuffer> videoBuffers = SetupBuffers(cameraFd, _config.BuffersNumber);
+    if (videoBuffers.empty())
+    {
+      Tracer::Log("Failed SetupBuffers().\n");
+      ::close(cameraFd);
+      return false;
+    }
     int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     int ioctlResult = Ioctl(cameraFd, VIDIOC_STREAMON, IoctlMaxTries, &type);
     if (ioctlResult != 0)
@@ -104,16 +104,18 @@ bool UvcGrabber::Init()
       ::close(cameraFd);
       return false;
     }
-  } else     _isSuspended = true; 
+    _videoBuffers.swap(videoBuffers);
+  }
 
   _cameraFd = cameraFd;
-  _videoBuffers.swap(videoBuffers);
 
   return true;
 }
 
 bool UvcGrabber::ReInit()
 {
+
+  Tracer::Log("UvcGrabber::ReInit\n");
   Shutdown();
 
   return Init();
@@ -121,9 +123,14 @@ bool UvcGrabber::ReInit()
 
 bool UvcGrabber::Suspend()
 {
-  if (_cameraFd == -1) return false;
 
-  if (_isSuspended) return true;
+  if (_cameraFd == -1)
+    return false;
+
+  if (_isSuspended)
+    return true;
+  Tracer::Log("UvcGrabber::Suspend\n");
+  //FreeBuffers(_cameraFd, _videoBuffers);
 
   int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
   int ioctlResult = Ioctl(_cameraFd, VIDIOC_STREAMOFF, IoctlMaxTries, &type);
@@ -132,16 +139,28 @@ bool UvcGrabber::Suspend()
     Tracer::Log("UvcGrabber::Suspend: Failed Ioctl(VIDIOC_STREAMOFF).\n");
     return false;
   }
+  _videoBuffers.resize(0);
   _isSuspended = true;
   return true;
-  
 }
 
 bool UvcGrabber::Resume()
 {
-  if (_cameraFd == -1 || _isBroken) return false;
 
-  if (!_isSuspended) return true;
+  if (_cameraFd == -1 || _isBroken)
+    return false;
+
+  if (!_isSuspended)
+    return true;
+  Tracer::Log("UvcGrabber::Resume\n");
+
+  std::vector<VideoBuffer> videoBuffers = SetupBuffers(_cameraFd, _config.BuffersNumber);
+  if (videoBuffers.empty())
+  {
+    Tracer::Log("Failed SetupBuffers().\n");
+    ::close(_cameraFd);
+    return false;
+  }
 
   int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
   int ioctlResult = Ioctl(_cameraFd, VIDIOC_STREAMON, IoctlMaxTries, &type);
@@ -152,12 +171,14 @@ bool UvcGrabber::Resume()
     ::close(_cameraFd);
     return false;
   }
+  _videoBuffers.swap(videoBuffers);
   _isSuspended = false;
   return true;
-  }
+}
 
 void UvcGrabber::Shutdown()
 {
+  Tracer::Log("UvcGrabber::Shutdown\n");
   if (_cameraFd != -1)
   {
     int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -207,7 +228,7 @@ const VideoBuffer* UvcGrabber::DequeuFrame()
     ioctlResult = Ioctl(_cameraFd, VIDIOC_QBUF, IoctlMaxTries, &v4l2Buffer);
     if (ioctlResult != 0)
     {
-      Tracer::Log("Failed Ioctl(VIDIOC_QBUF).\n");
+      Tracer::Log("DequeueFrame: Failed Ioctl(VIDIOC_QBUF).\n");
     }
 
     _isBroken = true;
@@ -234,7 +255,7 @@ void UvcGrabber::RequeueFrame(const VideoBuffer* videoBuffer)
   int ioctlResult = Ioctl(_cameraFd, VIDIOC_QBUF, IoctlMaxTries, &(origVideoBuffer.V4l2Buffer));
   if (ioctlResult < 0)
   {
-    Tracer::Log("Failed Ioctl(VIDIOC_QBUF).\n");
+    Tracer::Log("RequeueFrame: Failed Ioctl(VIDIOC_QBUF).\n");
     _isBroken = true;
   }
 }
@@ -277,7 +298,7 @@ namespace
     int ioctlResult = Ioctl(cameraFd, VIDIOC_REQBUFS, IoctlMaxTries, &requestBuffers);
     if (ioctlResult < 0)
     {
-      Tracer::Log("Failed Ioctl(VIDIOC_REQBUFS).\n");
+      Tracer::Log("FreeBuffers: Failed Ioctl(VIDIOC_REQBUFS).\n");
     }
 
     videoBuffers.resize(0);
@@ -296,7 +317,7 @@ namespace
       int ioctlResult = Ioctl(cameraFd, VIDIOC_REQBUFS, IoctlMaxTries, &requestBuffers);
       if (ioctlResult < 0)
       {
-        Tracer::Log("Failed Ioctl(VIDIOC_REQBUFS).\n");
+        Tracer::Log("SetupBuffers: Failed Ioctl(VIDIOC_REQBUFS).\n");
         return videoBuffers;
       }
     }
@@ -318,7 +339,7 @@ namespace
       ioctlResult = Ioctl(cameraFd, VIDIOC_QBUF, IoctlMaxTries, &buffer);
       if (ioctlResult != 0)
       {
-        Tracer::Log("Failed Ioctl(VIDIOC_QBUF).\n");
+        Tracer::Log("SetupBuffer: Failed Ioctl(VIDIOC_QBUF).\n");
         break;
       }
 
@@ -331,7 +352,7 @@ namespace
 
       videoBuffers.push_back(VideoBuffer{0});
 
-      videoBuffers[bufferIdx].Data = static_cast<uint8_t*>(bufferAddress);
+      videoBuffers[bufferIdx].Data = static_cast<uint8_t *>(bufferAddress);
       videoBuffers[bufferIdx].Idx = bufferIdx;
       videoBuffers[bufferIdx].Length = buffer.length;
     }
@@ -345,7 +366,7 @@ namespace
     return videoBuffers;
   }
 
-  bool SetupCamera(int cameraFd, const UvcGrabber::Config& config)
+  bool SetupCamera(int cameraFd, const UvcGrabber::Config &config)
   {
     v4l2_capability cameraCaps = {0};
     int ioctlResult = Ioctl(cameraFd, VIDIOC_QUERYCAP, IoctlMaxTries, &cameraCaps);
